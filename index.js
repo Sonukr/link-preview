@@ -83,6 +83,13 @@ async function generatePreview(targetUrl) {
     console.log('New page created. Setting user agent...');
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36');
     
+
+    // Randomize viewport slightly to avoid fingerprinting from consistent dimensions
+    await page.setViewport({
+      width: Math.floor(1024 + Math.random() * 100),
+      height: Math.floor(768 + Math.random() * 100),
+    });
+    
     // Set up navigation with retries
     const maxAttempts = 3;
     let attempt = 0;
@@ -96,6 +103,10 @@ async function generatePreview(targetUrl) {
           timeout: 30000, // 30 seconds timeout per attempt
           referer: 'https://www.google.com/'
         });
+
+        // Wait for the body to have some content (or use a more specific selector)
+        await page.waitForSelector('body', { timeout: 10000 });
+        await page.waitForFunction(() => document.body && document.body.innerText.length > 20, { timeout: 10000 });
         console.log('Navigation complete.');
         break;
       } catch (error) {
@@ -124,23 +135,43 @@ async function generatePreview(targetUrl) {
       };
 
       return {
-        title: document.title || null,
-        description: getMetaContent('description') || getMetaContent('og:description') || null,
-        image: getMetaContent('og:image') || getMetaContent('twitter:image') || null,
+        title: getMetaContent('og:title') || document.title || null,
+        siteName:
+          getMetaContent('og:site_name') || getMetaContent('application-name') ||
+          getMetaContent('al:android:app_name') || getMetaContent('al:ios:app_name') ||
+          getMetaContent('twitter:app:name:iphone') ||getMetaContent('twitter:app:name:ipad') ||
+          getMetaContent('twitter:app:name:googleplay') || (window.location.hostname ? window.location.hostname.replace(/^www\./, '') : null) ||
+          null,
+        description:
+          getMetaContent('description') || getMetaContent('og:description') ||
+          getMetaContent('twitter:description') || getMetaContent('dc.description') ||
+          getMetaContent('Description') || null,
         url: window.location.href,
-        siteName: getMetaContent('og:site_name') || null,
-        icon: document.querySelector('link[rel="icon"]')?.href || null
+        icon: (
+          document.querySelector('link[rel="icon"]')?.href || document.querySelector('link[rel="shortcut icon"]')?.href ||
+          document.querySelector('link[rel="apple-touch-icon"]')?.href || document.querySelector('link[rel="apple-touch-icon-precomposed"]')?.href ||
+          null
+        ),
+        image:
+          getMetaContent('og:image') ||
+          getMetaContent('twitter:image') ||
+          getMetaContent('image') ||
+          getMetaContent('twitter:image:src') ||
+          getMetaContent('og:image:url') ||
+          getMetaContent('og:image:secure_url') || null,
+          isScreenshot: false
       };
     });
     console.log('Metadata extracted:', JSON.stringify(previewData, null, 2));
 
     // Capture screenshot if no image found
     if (!previewData.image) {
+      previewData.isScreenshot = true;
       console.log('No image found in metadata. Capturing screenshot...');
       previewData.image = `data:image/png;base64,${await page.screenshot({ 
         encoding: 'base64',
         fullPage: false,  // Faster capture
-        quality: 70       // Reduce quality for smaller size
+        // quality: 70       // Reduce quality for smaller size
       })}`;
       console.log('Screenshot captured and added as image.');
     } else {
