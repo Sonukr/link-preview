@@ -24,7 +24,7 @@ A Node.js Express API that generates rich link previews using Puppeteer (with st
 ## Installation
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Sonukr/link-preview.git
 cd link-preview
 npm install
 ```
